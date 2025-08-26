@@ -1,5 +1,12 @@
 #!/bin/sh
 # /etc/uci-defaults/99-home-mesh
+# Aaron's MX4200v1 first-boot config:
+# - WAN + LAN3 = MGMT untagged (VLAN 99)
+# - LAN1 + LAN2 = IoT untagged (VLAN 10)
+# - Per-VLAN bridges: bridge.<VID> <-> bat0.<VID>
+# - Mesh on radio0 (5 GHz ch36) into BATMAN
+# - SSIDs (Home/Guest/IoT) on ALL radios, no client isolation
+# - uHTTPd TLS + NTP set; firewall disabled; watchcat disabled
 
 # ---------- EDITABLE VARS ----------
 MESHID='HOME-MESH'
@@ -159,7 +166,7 @@ mk_mesh_bridge iot   "$IOT_VID"  none
 mk_mesh_bridge home  "$HOME_VID" none
 mk_mesh_bridge guest "$GUEST_VID" none
 
-# ---------- SSIDs on ALL radios (no isolation anywhere) ----------
+# ---------- SSIDs on ALL radios (no isolation) ----------
 add_ap() {
   local dev="$1" ssid="$2" key="$3" net="$4" enc="$5"
   uci add wireless wifi-iface
@@ -175,7 +182,7 @@ add_ap() {
 for dev in radio0 radio1 radio2; do
   add_ap "$dev" "$HOME_SSID"  "$HOME_KEY"  'home'  'sae-mixed'
   add_ap "$dev" "$GUEST_SSID" "$GUEST_KEY" 'guest' 'sae-mixed'
-  add_ap "$dev" "$IOT_SSID"   "$IOT_KEY"   'iot'   'psk2'      # widest compatibility
+  add_ap "$dev" "$IOT_SSID"   "$IOT_KEY"   'iot'   'psk2'
 done
 
 # ---------- uHTTPd TLS ----------
@@ -201,19 +208,19 @@ uci add_list vnstat.@vnstat[0].interface="bridge.$HOME_VID"
 uci add_list vnstat.@vnstat[0].interface="bridge.$GUEST_VID"
 
 # ---------- Services ----------
-# disable OpenWrt firewall (pfSense does the job)
+# Disable firewall (pfSense in front)
 if /etc/init.d/firewall enabled 2>/dev/null; then
   /etc/init.d/firewall stop
   /etc/init.d/firewall disable
 fi
 
-# leave watchcat disabled
+# Leave watchcat disabled (stop if enabled)
 if /etc/init.d/watchcat enabled 2>/dev/null; then
   /etc/init.d/watchcat stop
   /etc/init.d/watchcat disable
 fi
 
-# enable/start essentials
+# Enable key services
 /etc/init.d/lldpd enable 2>/dev/null;   /etc/init.d/lldpd start 2>/dev/null
 /etc/init.d/collectd enable 2>/dev/null; /etc/init.d/collectd start 2>/dev/null
 /etc/init.d/vnstat enable 2>/dev/null;   /etc/init.d/vnstat start 2>/dev/null

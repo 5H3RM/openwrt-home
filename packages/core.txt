@@ -1,0 +1,21 @@
+# Core packages to bake into the image (extras only; base OS comes from ImageBuilder).
+# Mesh + admin + LuCI helpers. Safe across AP-1/2/3.
+wpad-mbedtls
+kmod-batman-adv
+batctl-full
+luci-proto-batman-adv
+luci
+ip-full
+nano
+watchcat
+owut
+luci-app-advanced-reboot
+attendedsysupgrade-common
+luci-app-attendedsysupgrade
+lldpd
+luci-app-lldpd
+kmod-ledtrig-activity
+kmod-ledtrig-gpio
+kmod-usb-ledtrig-usbport
+luci-app-ledtrig-switch
+luci-app-ledtrig-usbport

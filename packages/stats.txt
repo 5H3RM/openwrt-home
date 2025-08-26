@@ -1,0 +1,30 @@
+# Lightweight on-device charts. You can comment modules out to slim further.
+collectd
+collectd-mod-cpu
+collectd-mod-interface
+collectd-mod-iwinfo
+collectd-mod-load
+collectd-mod-memory
+collectd-mod-network
+collectd-mod-ping
+collectd-mod-processes
+collectd-mod-tcpconns
+collectd-mod-wireless
+collectd-mod-uptime
+collectd-mod-rrdtool
+luci-app-statistics
+rrdtool1
+vnstat2
+vnstati2
+luci-app-vnstat2
+
+# Optional extras you can add later:
+# collectd-mod-ipstatistics
+# collectd-mod-cpufreq
+# collectd-mod-ethstat
+# collectd-mod-logfile
+# collectd-mod-syslog
+# collectd-mod-thermal
+# collectd-mod-statsd
+# collectd-mod-snmp
+# collectd-mod-table
