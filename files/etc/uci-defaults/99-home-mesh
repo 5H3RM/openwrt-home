@@ -1,0 +1,223 @@
+#!/bin/sh
+# /etc/uci-defaults/99-home-mesh
+
+# ---------- EDITABLE VARS ----------
+MESHID='HOME-MESH'
+MESHPASS='ChangeMeSuperSafe'
+
+MGMT_VID=99
+IOT_VID=10
+HOME_VID=30
+GUEST_VID=20
+
+HOME_SSID='Loading...'
+HOME_KEY='stillloading'
+GUEST_SSID='Guest...'
+GUEST_KEY='whosinmyhouse'
+IOT_SSID='Starlink 5Ghz'
+IOT_KEY='NOT4elon#'
+
+NTP1='10.99.99.1'
+NTP2='time.cloudflare.com'
+NTP3='time.google.com'
+# -----------------------------------
+
+# ---------- Hostname by LAN-bridge MAC ----------
+BRMAC="$(cat /sys/class/net/br-lan/address 2>/dev/null || cat /sys/class/net/bridge/address 2>/dev/null || echo unknown)"
+case "$BRMAC" in
+  d8:ec:5e:86:f9:7f) HN='AP-1' ;;
+  d8:ec:5e:87:13:ce) HN='AP-2' ;;
+  d8:ec:5e:86:f7:bd) HN='AP-3' ;;
+  *) HN='AP-unknown' ;;
+esac
+uci set system.@system[0].hostname="$HN"
+uci set system.@system[0].zonename='America/Chicago'
+uci set system.@system[0].timezone='CST6CDT,M3.2.0,M11.1.0'
+
+# NTP
+uci set system.ntp=timeserver
+uci set system.ntp.enabled='1'
+uci -q delete system.ntp.server
+uci add_list system.ntp.server="$NTP1"
+uci add_list system.ntp.server="$NTP2"
+uci add_list system.ntp.server="$NTP3"
+
+# ---------- SSH (password off; use keys) ----------
+uci set dropbear.@dropbear[0].PasswordAuth='off'
+uci set dropbear.@dropbear[0].RootPasswordAuth='off'
+
+# ---------- Radios ----------
+uci set wireless.radio0.country='US'
+uci set wireless.radio0.band='5g'
+uci set wireless.radio0.channel='36'
+uci set wireless.radio0.htmode='HE80'
+uci set wireless.radio0.disabled='0'
+
+uci set wireless.radio1.country='US'
+uci set wireless.radio1.band='2g'
+uci set wireless.radio1.htmode='HE20'
+uci set wireless.radio1.disabled='0'
+
+uci set wireless.radio2.country='US'
+uci set wireless.radio2.band='5g'
+uci set wireless.radio2.htmode='HE80'
+uci set wireless.radio2.disabled='0'
+
+# wipe any default ifaces to avoid dupes
+while uci -q delete wireless.@wifi-iface[0]; do :; done
+
+# ---------- BATMAN base ----------
+uci -q delete network.bat0
+uci set network.bat0='interface'
+uci set network.bat0.proto='batadv'
+uci set network.bat0.routing_algo='BATMAN_IV'
+uci set network.bat0.bridge_loop_avoidance='1'
+uci set network.bat0.ap_isolation='0'
+
+uci -q delete network.meshif
+uci set network.meshif='interface'
+uci set network.meshif.proto='batadv_hardif'
+uci set network.meshif.master='bat0'
+
+# mesh iface on radio0
+uci add wireless wifi-iface
+uci set wireless.@wifi-iface[-1].device='radio0'
+uci set wireless.@wifi-iface[-1].mode='mesh'
+uci set wireless.@wifi-iface[-1].mesh_id="$MESHID"
+uci set wireless.@wifi-iface[-1].mesh_fwding='0'
+uci set wireless.@wifi-iface[-1].encryption='sae'
+uci set wireless.@wifi-iface[-1].key="$MESHPASS"
+uci set wireless.@wifi-iface[-1].network='meshif'
+uci set wireless.@wifi-iface[-1].mcast_rate='24000'
+uci set wireless.@wifi-iface[-1].disabled='0'
+
+# ---------- DSA bridge (NO bat0 here) ----------
+uci -q delete network.bridge
+uci set network.bridge='device'
+uci set network.bridge.name='bridge'
+uci set network.bridge.type='bridge'
+uci set network.bridge.stp='1'
+uci set network.bridge.vlan_filtering='1'
+uci add_list network.bridge.ports='wan'
+uci add_list network.bridge.ports='lan1'
+uci add_list network.bridge.ports='lan2'
+uci add_list network.bridge.ports='lan3'
+
+# wipe existing VLANs
+while uci -q delete network.@bridge-vlan[0]; do :; done
+
+# MGMT 99: untagged on WAN + LAN3
+uci add network bridge-vlan
+uci set network.@bridge-vlan[-1].device='bridge'
+uci set network.@bridge-vlan[-1].vlan="$MGMT_VID"
+uci add_list network.@bridge-vlan[-1].ports='wan:u*'
+uci add_list network.@bridge-vlan[-1].ports='lan3:u'
+
+# IoT 10: untagged on LAN1 + LAN2
+uci add network bridge-vlan
+uci set network.@bridge-vlan[-1].device='bridge'
+uci set network.@bridge-vlan[-1].vlan="$IOT_VID"
+uci add_list network.@bridge-vlan[-1].ports='lan1:u*'
+uci add_list network.@bridge-vlan[-1].ports='lan2:u'
+
+# HOME 30: bridge self only
+uci add network bridge-vlan
+uci set network.@bridge-vlan[-1].device='bridge'
+uci set network.@bridge-vlan[-1].vlan="$HOME_VID"
+uci add_list network.@bridge-vlan[-1].ports='bridge:t'
+
+# GUEST 20: bridge self only
+uci add network bridge-vlan
+uci set network.@bridge-vlan[-1].device='bridge'
+uci set network.@bridge-vlan[-1].vlan="$GUEST_VID"
+uci add_list network.@bridge-vlan[-1].ports='bridge:t'
+
+# ---------- per-VLAN overlay bridges (bat0.<VID> <-> bridge.<VID>) ----------
+mk_mesh_bridge() {
+  local name="$1" vid="$2" iptype="$3"
+
+  uci add network device
+  uci set network.@device[-1].type='8021q'
+  uci set network.@device[-1].ifname='bat0'
+  uci set network.@device[-1].vid="$vid"
+  uci set network.@device[-1].name="bat0.$vid"
+
+  uci add network device
+  uci set network.@device[-1].type='bridge'
+  uci set network.@device[-1].name="br-mesh-$name"
+  uci add_list network.@device[-1].ports="bat0.$vid"
+  uci add_list network.@device[-1].ports="bridge.$vid"
+
+  uci -q delete network.$name
+  uci set network.$name='interface'
+  uci set network.$name.device="br-mesh-$name"
+  [ "$iptype" = "dhcp" ] && uci set network.$name.proto='dhcp' || uci set network.$name.proto='none'
+}
+
+mk_mesh_bridge mgmt  "$MGMT_VID" dhcp
+mk_mesh_bridge iot   "$IOT_VID"  none
+mk_mesh_bridge home  "$HOME_VID" none
+mk_mesh_bridge guest "$GUEST_VID" none
+
+# ---------- SSIDs on ALL radios (no isolation anywhere) ----------
+add_ap() {
+  local dev="$1" ssid="$2" key="$3" net="$4" enc="$5"
+  uci add wireless wifi-iface
+  uci set wireless.@wifi-iface[-1].device="$dev"
+  uci set wireless.@wifi-iface[-1].mode='ap'
+  uci set wireless.@wifi-iface[-1].ssid="$ssid"
+  uci set wireless.@wifi-iface[-1].encryption="$enc"
+  uci set wireless.@wifi-iface[-1].key="$key"
+  uci set wireless.@wifi-iface[-1].network="$net"
+  uci set wireless.@wifi-iface[-1].isolate='0'
+}
+
+for dev in radio0 radio1 radio2; do
+  add_ap "$dev" "$HOME_SSID"  "$HOME_KEY"  'home'  'sae-mixed'
+  add_ap "$dev" "$GUEST_SSID" "$GUEST_KEY" 'guest' 'sae-mixed'
+  add_ap "$dev" "$IOT_SSID"   "$IOT_KEY"   'iot'   'psk2'      # widest compatibility
+done
+
+# ---------- uHTTPd TLS ----------
+uci set uhttpd.main.listen_http='0.0.0.0:80 [::]:80'
+uci set uhttpd.main.listen_https='0.0.0.0:443 [::]:443'
+uci set uhttpd.main.redirect_https='1'
+uci set uhttpd.defaults=cert
+uci set uhttpd.defaults.days='397'
+uci set uhttpd.defaults.key_type='ec'
+uci set uhttpd.defaults.ec_curve='P-256'
+
+# ---------- Stats: collectd + vnstat ----------
+uci set luci_statistics.collectd.enable='1'
+uci set luci_statistics.collectd.Interval='30'
+for p in cpu interface iwinfo load memory network processes tcpconns wireless uptime; do
+  uci set luci_statistics.collectd_${p}.enable='1'
+done
+uci -q delete vnstat.@vnstat[0]
+uci add vnstat vnstat
+uci add_list vnstat.@vnstat[0].interface="bridge.$MGMT_VID"
+uci add_list vnstat.@vnstat[0].interface="bridge.$IOT_VID"
+uci add_list vnstat.@vnstat[0].interface="bridge.$HOME_VID"
+uci add_list vnstat.@vnstat[0].interface="bridge.$GUEST_VID"
+
+# ---------- Services ----------
+# disable OpenWrt firewall (pfSense does the job)
+if /etc/init.d/firewall enabled 2>/dev/null; then
+  /etc/init.d/firewall stop
+  /etc/init.d/firewall disable
+fi
+
+# leave watchcat disabled
+if /etc/init.d/watchcat enabled 2>/dev/null; then
+  /etc/init.d/watchcat stop
+  /etc/init.d/watchcat disable
+fi
+
+# enable/start essentials
+/etc/init.d/lldpd enable 2>/dev/null;   /etc/init.d/lldpd start 2>/dev/null
+/etc/init.d/collectd enable 2>/dev/null; /etc/init.d/collectd start 2>/dev/null
+/etc/init.d/vnstat enable 2>/dev/null;   /etc/init.d/vnstat start 2>/dev/null
+/etc/init.d/uhttpd enable 2>/dev/null;   /etc/init.d/uhttpd restart 2>/dev/null
+
+uci commit
+exit 0
