@@ -1,0 +1,48 @@
+name: Build OpenWrt Image (MX4200)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      OPENWRT_VER: "24.10.2"
+      TARGET: "qualcommax"
+      SUBTARGET: "ipq807x"
+      PROFILE: "linksys_mx4200"
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y build-essential curl xz-utils ca-certificates
+
+      - name: Download ImageBuilder
+        run: |
+          URL="https://downloads.openwrt.org/releases/${OPENWRT_VER}/targets/${TARGET}/${SUBTARGET}/openwrt-imagebuilder-${OPENWRT_VER}-${TARGET}-${SUBTARGET}.Linux-x86_64.tar.xz"
+          curl -L "$URL" -o ib.tar.xz
+          tar -xf ib.tar.xz
+          echo "IBDIR=$(tar -tf ib.tar.xz | head -1 | cut -d/ -f1)" >> $GITHUB_ENV
+
+      - name: Copy files into ImageBuilder
+        run: |
+          cd "$IBDIR"
+          mkdir -p files
+          rsync -a ../files/ files/
+          CORE_PKGS="$(tr '\n' ' ' < ../packages/core.txt)"
+          STATS_PKGS="$(tr '\n' ' ' < ../packages/stats.txt)"
+          echo "PKGS=$CORE_PKGS $STATS_PKGS" >> $GITHUB_ENV
+
+      - name: Build image
+        run: |
+          cd "$IBDIR"
+          make image PROFILE="${PROFILE}" PACKAGES="${PKGS}" FILES=files/
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-${{ env.OPENWRT_VER }}-${{ env.PROFILE }}
+          path: ${{ env.IBDIR }}/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/*sysupgrade*.bin
