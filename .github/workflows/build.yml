@@ -41,7 +41,7 @@ jobs:
           STATS_PKGS="$(tr '\n' ' ' < ../packages/stats.txt 2>/dev/null || true)"
           echo "PKGS=$CORE_PKGS $STATS_PKGS" >> $GITHUB_ENV
 
-      - name: Sanity: ensure profile exists
+      - name: sanity - ensure profile exists
         run: |
           cd "$IBDIR"
           if [ -f profiles.json ]; then
