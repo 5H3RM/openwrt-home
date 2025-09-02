@@ -19,12 +19,12 @@ vnstati2
 luci-app-vnstat2
 
 # Optional extras you can add later:
-# collectd-mod-ipstatistics
-# collectd-mod-cpufreq
-# collectd-mod-ethstat
-# collectd-mod-logfile
-# collectd-mod-syslog
-# collectd-mod-thermal
-# collectd-mod-statsd
-# collectd-mod-snmp
-# collectd-mod-table
+collectd-mod-ipstatistics
+collectd-mod-cpufreq
+collectd-mod-ethstat
+collectd-mod-logfile
+collectd-mod-syslog
+collectd-mod-thermal
+collectd-mod-statsd
+collectd-mod-snmp
+collectd-mod-table
