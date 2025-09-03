@@ -34,7 +34,16 @@ jobs:
           echo "IBDIR=$IBDIR" >> $GITHUB_ENV
           echo "IBDIR resolved to: $IBDIR"
 
-      - name: Assemble and validate package list
+      - name: Show default packages for profile
+        run: |
+          set -e
+          cd "$IBDIR"
+          if [ -f profiles.json ]; then
+            echo "Default packages for ${PROFILE}:"
+            jq -r --arg P "${PROFILE}" '.[] | .profiles[$P].default_packages[]?' profiles.json | sort
+          fi
+
+      - name: Assemble and validate package list (strip comments/empties)
         run: |
           set -euxo pipefail
 
@@ -46,26 +55,29 @@ jobs:
           [ -f packages/stats.txt ] && STATS_PKGS="$(sanitize < packages/stats.txt)"
           PKGS="$(echo "$CORE_PKGS $STATS_PKGS" | xargs || true)"
 
-          # Filter out known base OS packages (ImageBuilder already adds them)
-          BASE_RE='^(base-files|busybox|ca-bundle|dnsmasq($|-full|-(-.*))?|dropbear|e2fsprogs|firewall4|fstools|libc|libgcc|libustream-.*|logd|losetup|mtd|netifd|nftables|odhcp6c|odhcpd-ipv6only|opkg|ppp($|-mod-pppoe)?|procd(-ujail)?|uboot-envtools|uci|uclient-fetch|urandom-seed|urngd)$'
-          CLEAN_PKGS=""
+          # Remove known base OS packages (IB provides them already)
+          BASE_RE='^(base-files|busybox|ca-bundle|dnsmasq($|-full|-.*)?|dropbear|e2fsprogs|firewall4|fstools|libc|libgcc|libustream-.*|logd|losetup|mtd|netifd|nftables|odhcp6c|odhcpd-ipv6only|opkg|ppp($|-mod-pppoe)?|procd(-ujail)?|uboot-envtools|uci|uclient-fetch|urandom-seed|urngd)$'
+          CLEAN=""
           for p in $PKGS; do
             if echo "$p" | grep -Eq "$BASE_RE"; then
               echo "Skipping base package: $p"
             else
-              CLEAN_PKGS="$CLEAN_PKGS $p"
+              CLEAN="$CLEAN $p"
             fi
           done
-          PKGS="$(echo "$CLEAN_PKGS" | xargs || true)"
+          PKGS="$(echo "$CLEAN" | xargs || true)"
 
-          # Guard: never empty (prevents 'opkg install' with no args)
-          if [ -z "$PKGS" ]; then
-            PKGS="luci"
+          # If user requested a full wpad*, drop the basic/mini defaults to avoid file clashes
+          if echo " $PKGS " | grep -Eq ' wpad-(mbedtls|wolfssl|openssl) '; then
+            PKGS="$PKGS -wpad-basic-mbedtls -wpad-basic-wolfssl -wpad-mini"
           fi
 
-          # Guard: reject known non-official NSS package to avoid 404s
+          # Guard: ensure we pass at least one package
+          if [ -z "$PKGS" ]; then PKGS="luci"; fi
+
+          # Guard: reject NSS (not in official 24.10.x feeds here)
           if echo " $PKGS " | grep -q " kmod-qca-nss-dp "; then
-            echo "::error::kmod-qca-nss-dp is not in official feeds for ${TARGET}/${SUBTARGET}. Remove it (use a custom NSS build later)."
+            echo "::error::kmod-qca-nss-dp is not in official feeds for ${TARGET}/${SUBTARGET}. Remove it or use a custom NSS build."
             exit 1
           fi
 
@@ -109,4 +121,5 @@ jobs:
           name: build-logs
           path: |
             ${{ env.IBDIR }}/logs/**
+            ${{ env.IBDIR }}/build_dir/**/*.log
             ${{ env.IBDIR }}/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/
