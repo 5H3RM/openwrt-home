@@ -19,6 +19,7 @@ jobs:
 
       - name: Install deps
         run: |
+          set -euxo pipefail
           sudo apt-get update
           sudo apt-get install -y build-essential curl zstd jq ca-certificates rsync
 
@@ -29,48 +30,83 @@ jobs:
           echo "Fetching $IB_URL"
           curl -fL "$IB_URL" -o ib.tar.zst
           tar -I zstd -xf ib.tar.zst
-          # Find the extracted directory reliably
           IBDIR="$(ls -d openwrt-imagebuilder-${OPENWRT_VER}-${TARGET}-${SUBTARGET}.Linux-* | head -1)"
           echo "IBDIR=$IBDIR" >> $GITHUB_ENV
+          echo "IBDIR resolved to: $IBDIR"
 
-      - name: Assemble package list (strip comments/empties)
+      - name: Assemble and validate package list
         run: |
-          set -e
+          set -euxo pipefail
+
           sanitize() { awk '!/^\s*($|#)/ { print $1 }' | tr '\n' ' '; }
+
           CORE_PKGS=""
           STATS_PKGS=""
           [ -f packages/core.txt ]  && CORE_PKGS="$(sanitize < packages/core.txt)"
           [ -f packages/stats.txt ] && STATS_PKGS="$(sanitize < packages/stats.txt)"
-          PKGS="$(echo "$CORE_PKGS $STATS_PKGS" | xargs)"
-          # Safety: ensure at least one package so opkg has an argument
-          if [ -z "$PKGS" ]; then PKGS="luci"; fi
+          PKGS="$(echo "$CORE_PKGS $STATS_PKGS" | xargs || true)"
+
+          # Filter out known base OS packages (ImageBuilder already adds them)
+          BASE_RE='^(base-files|busybox|ca-bundle|dnsmasq($|-full|-(-.*))?|dropbear|e2fsprogs|firewall4|fstools|libc|libgcc|libustream-.*|logd|losetup|mtd|netifd|nftables|odhcp6c|odhcpd-ipv6only|opkg|ppp($|-mod-pppoe)?|procd(-ujail)?|uboot-envtools|uci|uclient-fetch|urandom-seed|urngd)$'
+          CLEAN_PKGS=""
+          for p in $PKGS; do
+            if echo "$p" | grep -Eq "$BASE_RE"; then
+              echo "Skipping base package: $p"
+            else
+              CLEAN_PKGS="$CLEAN_PKGS $p"
+            fi
+          done
+          PKGS="$(echo "$CLEAN_PKGS" | xargs || true)"
+
+          # Guard: never empty (prevents 'opkg install' with no args)
+          if [ -z "$PKGS" ]; then
+            PKGS="luci"
+          fi
+
+          # Guard: reject known non-official NSS package to avoid 404s
+          if echo " $PKGS " | grep -q " kmod-qca-nss-dp "; then
+            echo "::error::kmod-qca-nss-dp is not in official feeds for ${TARGET}/${SUBTARGET}. Remove it (use a custom NSS build later)."
+            exit 1
+          fi
+
           echo "Using packages: $PKGS"
           echo "PKGS=$PKGS" >> $GITHUB_ENV
 
       - name: Copy custom files into ImageBuilder
         run: |
-          set -e
+          set -euxo pipefail
           cd "$IBDIR"
           mkdir -p files
           [ -d ../files ] && rsync -a ../files/ files/
 
       - name: Sanity - ensure profile exists
         run: |
-          set -e
+          set -euxo pipefail
           cd "$IBDIR"
           if [ -f profiles.json ]; then
             jq -r '.[].profiles | keys[]' profiles.json | grep -q "^${PROFILE}$" || {
-              echo "Profile '${PROFILE}' not found in profiles.json"; exit 1; }
+              echo "::error::Profile '${PROFILE}' not found in profiles.json"; exit 1; }
           fi
 
       - name: Build image (verbose)
         run: |
-          set -e
+          set -euxo pipefail
           cd "$IBDIR"
+          echo "make -j$(nproc) V=s image PROFILE='${PROFILE}' PACKAGES='${PKGS}' FILES=files/"
           make -j"$(nproc)" V=s image PROFILE="${PROFILE}" PACKAGES="${PKGS}" FILES=files/
 
-      - name: Upload firmware artifacts
+      - name: Upload firmware
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: openwrt-${{ env.OPENWRT_VER }}-${{ env.PROFILE }}
           path: ${{ env.IBDIR }}/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/*sysupgrade*.bin
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            ${{ env.IBDIR }}/logs/**
+            ${{ env.IBDIR }}/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/
