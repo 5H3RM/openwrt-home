@@ -5,6 +5,7 @@ kmod-batman-adv
 batctl-full
 luci-proto-batman-adv
 luci
+ipq-wifi-linksys_mx4200
 ip-full
 nano
 watchcat
