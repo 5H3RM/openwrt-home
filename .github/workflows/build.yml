@@ -55,7 +55,7 @@ jobs:
           [ -f packages/stats.txt ] && STATS_PKGS="$(sanitize < packages/stats.txt)"
           PKGS="$(echo "$CORE_PKGS $STATS_PKGS" | xargs || true)"
 
-          # Remove known base OS packages (IB provides them already)
+          # Skip base OS packages (IB provides these)
           BASE_RE='^(base-files|busybox|ca-bundle|dnsmasq($|-full|-.*)?|dropbear|e2fsprogs|firewall4|fstools|libc|libgcc|libustream-.*|logd|losetup|mtd|netifd|nftables|odhcp6c|odhcpd-ipv6only|opkg|ppp($|-mod-pppoe)?|procd(-ujail)?|uboot-envtools|uci|uclient-fetch|urandom-seed|urngd)$'
           CLEAN=""
           for p in $PKGS; do
@@ -67,7 +67,7 @@ jobs:
           done
           PKGS="$(echo "$CLEAN" | xargs || true)"
 
-          # If user requested a full wpad*, drop the basic/mini defaults to avoid file clashes
+          # If using full wpad*, subtract basic variants to avoid file clashes
           if echo " $PKGS " | grep -Eq ' wpad-(mbedtls|wolfssl|openssl) '; then
             PKGS="$PKGS -wpad-basic-mbedtls -wpad-basic-wolfssl -wpad-mini"
           fi
@@ -75,9 +75,9 @@ jobs:
           # Guard: ensure we pass at least one package
           if [ -z "$PKGS" ]; then PKGS="luci"; fi
 
-          # Guard: reject NSS (not in official 24.10.x feeds here)
+          # Guard: reject NSS (not in official feeds for this target)
           if echo " $PKGS " | grep -q " kmod-qca-nss-dp "; then
-            echo "::error::kmod-qca-nss-dp is not in official feeds for ${TARGET}/${SUBTARGET}. Remove it or use a custom NSS build."
+            echo "::error::kmod-qca-nss-dp is not in the official ${TARGET}/${SUBTARGET} feeds. Remove it or use a custom NSS build."
             exit 1
           fi
 
@@ -90,6 +90,32 @@ jobs:
           cd "$IBDIR"
           mkdir -p files
           [ -d ../files ] && rsync -a ../files/ files/
+
+      - name: Ensure script permissions
+        run: |
+          set -euxo pipefail
+          cd "$IBDIR"
+          [ -d files/etc/uci-defaults ] && chmod +x files/etc/uci-defaults/* || true
+          [ -f files/etc/init.d/mesh-stage ] && chmod +x files/etc/init.d/mesh-stage || true
+
+      - name: Sanity - verify correct scripts present
+        run: |
+          set -euxo pipefail
+          cd "$IBDIR"
+          echo "===== files/ tree embedded in image ====="
+          find files -maxdepth 5 -type f -print | sort || true
+
+          # hard fail if the old script is still present
+          if [ -f files/etc/uci-defaults/99-home-mesh ]; then
+            echo "::error::Remove files/etc/uci-defaults/99-home-mesh from the repo. We now use 90-base-net + mesh-stage."
+            exit 1
+          fi
+
+          # require both the new scripts
+          if [ ! -f files/etc/uci-defaults/90-base-net ] || [ ! -f files/etc/init.d/mesh-stage ]; then
+            echo "::error::Missing 90-base-net or mesh-stage. Both are required for one-and-done safe boot."
+            exit 1
+          fi
 
       - name: Sanity - ensure profile exists
         run: |
