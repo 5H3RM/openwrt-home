@@ -36,15 +36,17 @@ Mesh is implemented using batman-adv.
 
 ## Repository Structure
 
+```
 openwrt-home/
-├── images/ # Custom firmware binaries + build config
-├── ap1/ # AP-1 configs
-├── ap2/ # AP-2 configs
-├── ap3/ # Garage AP configs
-├── diagrams/ # Network topology diagrams
-├── BUILD.md # Firmware build instructions
-├── RESTORE.md # Full AP recovery process
+├── images/     # Custom firmware binaries + build config
+├── ap1/        # AP-1 configs
+├── ap2/        # AP-2 configs
+├── ap3/        # Garage AP configs
+├── diagrams/   # Network topology diagrams
+├── BUILD.md    # Firmware build instructions
+├── RESTORE.md  # Full AP recovery process
 └── README.md
+```
 
 ---
 
