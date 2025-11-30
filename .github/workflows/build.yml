@@ -5,6 +5,9 @@ on:
   push:
     branches: [ main ]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -148,22 +151,22 @@ jobs:
           echo "make -j$(nproc) V=s image PROFILE='${PROFILE}' PACKAGES='${PKGS}' FILES=files/"
           make -j"$(nproc)" V=s image PROFILE="${PROFILE}" PACKAGES="${PKGS}" FILES=files/
 
-      - name: Copy firmware into repo images folder
-        if: success()
-        run: |
-          set -euxo pipefail
-          mkdir -p "images/${OPENWRT_VER}"
-          echo "Listing build outputs in $IBDIR/bin/targets/${TARGET}/${SUBTARGET}/"
-          ls -l "$IBDIR/bin/targets/${TARGET}/${SUBTARGET}/"
-          cp "$IBDIR/bin/targets/${TARGET}/${SUBTARGET}/"*sysupgrade*.bin "images/${OPENWRT_VER}/"
-          echo "Staged firmware to images/${OPENWRT_VER}/"
-
       - name: Upload firmware
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: openwrt-${{ env.OPENWRT_VER }}-${{ env.PROFILE }}
           path: ${{ env.IBDIR }}/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/*sysupgrade*.bin
+
+      - name: Publish release asset for this build
+        if: success()
+        uses: ncipollo/release-action@v1
+        with:
+          tag: openwrt-${{ env.OPENWRT_VER }}
+          name: OpenWrt ${{ env.OPENWRT_VER }} (${{ env.PROFILE }})
+          artifacts: ${{ env.IBDIR }}/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/*sysupgrade*.bin
+          artifactContentType: application/octet-stream
+          allowUpdates: true
 
       - name: Upload logs on failure
         if: failure()
