@@ -149,10 +149,14 @@ jobs:
           make -j"$(nproc)" V=s image PROFILE="${PROFILE}" PACKAGES="${PKGS}" FILES=files/
 
       - name: Copy firmware into repo images folder
+        if: success()
         run: |
           set -euxo pipefail
-          mkdir -p images
-          cp "$IBDIR/bin/targets/${TARGET}/${SUBTARGET}/"*sysupgrade*.bin images/
+          mkdir -p "images/${OPENWRT_VER}"
+          echo "Listing build outputs in $IBDIR/bin/targets/${TARGET}/${SUBTARGET}/"
+          ls -l "$IBDIR/bin/targets/${TARGET}/${SUBTARGET}/"
+          cp "$IBDIR/bin/targets/${TARGET}/${SUBTARGET}/"*sysupgrade*.bin "images/${OPENWRT_VER}/"
+          echo "Staged firmware to images/${OPENWRT_VER}/"
 
       - name: Upload firmware
         if: success()
