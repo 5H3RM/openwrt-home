@@ -102,39 +102,6 @@ jobs:
           echo "Using packages: $PKGS"
           echo "PKGS=$PKGS" >> $GITHUB_ENV
 
-      - name: Copy custom files into ImageBuilder
-        run: |
-          set -euxo pipefail
-          cd "$IBDIR"
-          mkdir -p files
-          [ -d ../files ] && rsync -a ../files/ files/
-
-      - name: Ensure script permissions
-        run: |
-          set -euxo pipefail
-          cd "$IBDIR"
-          [ -d files/etc/uci-defaults ] && chmod +x files/etc/uci-defaults/* || true
-          [ -f files/etc/init.d/mesh-stage ] && chmod +x files/etc/init.d/mesh-stage || true
-
-      - name: Sanity - verify correct scripts present
-        run: |
-          set -euxo pipefail
-          cd "$IBDIR"
-          echo "===== files/ tree embedded in image ====="
-          find files -maxdepth 5 -type f -print | sort || true
-
-          # hard fail if the old script is still present
-          if [ -f files/etc/uci-defaults/99-home-mesh ]; then
-            echo "::error::Remove files/etc/uci-defaults/99-home-mesh from the repo. We now use 90-base-net + mesh-stage."
-            exit 1
-          fi
-
-          # require both the new scripts
-          if [ ! -f files/etc/uci-defaults/90-base-net ] || [ ! -f files/etc/init.d/mesh-stage ]; then
-            echo "::error::Missing 90-base-net or mesh-stage. Both are required for one-and-done safe boot."
-            exit 1
-          fi
-
       - name: Sanity - ensure profile exists
         run: |
           set -euxo pipefail
@@ -148,8 +115,8 @@ jobs:
         run: |
           set -euxo pipefail
           cd "$IBDIR"
-          echo "make -j$(nproc) V=s image PROFILE='${PROFILE}' PACKAGES='${PKGS}' FILES=files/"
-          make -j"$(nproc)" V=s image PROFILE="${PROFILE}" PACKAGES="${PKGS}" FILES=files/
+          echo "make -j$(nproc) V=s image PROFILE='${PROFILE}' PACKAGES='${PKGS}'"
+          make -j"$(nproc)" V=s image PROFILE="${PROFILE}" PACKAGES="${PKGS}"
 
       - name: Upload firmware
         if: success()
