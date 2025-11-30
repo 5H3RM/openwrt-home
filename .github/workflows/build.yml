@@ -148,6 +148,12 @@ jobs:
           echo "make -j$(nproc) V=s image PROFILE='${PROFILE}' PACKAGES='${PKGS}' FILES=files/"
           make -j"$(nproc)" V=s image PROFILE="${PROFILE}" PACKAGES="${PKGS}" FILES=files/
 
+      - name: Copy firmware into repo images folder
+        run: |
+          set -euxo pipefail
+          mkdir -p images
+          cp "$IBDIR/bin/targets/${TARGET}/${SUBTARGET}/"*sysupgrade*.bin images/
+
       - name: Upload firmware
         if: success()
         uses: actions/upload-artifact@v4

@@ -14,9 +14,6 @@ collectd-mod-uptime
 collectd-mod-rrdtool
 luci-app-statistics
 rrdtool1
-vnstat2
-vnstati2
-luci-app-vnstat2
 
 # Optional extras you can add later:
 collectd-mod-ipstatistics
