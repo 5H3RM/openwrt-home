@@ -48,7 +48,6 @@ Core packages included in the custom image:
 Optional / future packages:
 - mesh diagnostics
 - monitoring tools
-- VPN (if added later)
 
 ---
 
