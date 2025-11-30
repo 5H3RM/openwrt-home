@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      OPENWRT_VER: "24.10.2"
+      OPENWRT_VER: "24.10"
       TARGET: "qualcommax"
       SUBTARGET: "ipq807x"
       PROFILE: "linksys_mx4200v1"
