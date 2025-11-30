@@ -9,7 +9,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      OPENWRT_VER: "24.10"
+      OPENWRT_SERIES: "24.10" # stick to this series; we resolve the latest patch dynamically
+      OPENWRT_VER: "24.10.4"  # fallback; overwritten by resolver step
       TARGET: "qualcommax"
       SUBTARGET: "ipq807x"
       PROFILE: "linksys_mx4200v1"
@@ -22,6 +23,20 @@ jobs:
           set -euxo pipefail
           sudo apt-get update
           sudo apt-get install -y build-essential curl zstd jq ca-certificates rsync
+
+      - name: Resolve latest OpenWrt patch in series
+        run: |
+          set -euxo pipefail
+          SERIES="${OPENWRT_SERIES}"
+          PAGE="$(curl -fsSL https://downloads.openwrt.org/releases/)"
+          MATCHES=$(echo "$PAGE" | grep -oE "${SERIES//./\\.}\\.[0-9]+" | sort -V | uniq)
+          VER=$(echo "$MATCHES" | tail -n1 || true)
+          if [ -z "$VER" ]; then
+            echo "::error::No releases found for series ${SERIES}. The site may have changed."
+            exit 1
+          fi
+          echo "Resolved latest ${SERIES}.x release: ${VER}"
+          echo "OPENWRT_VER=${VER}" >> "$GITHUB_ENV"
 
       - name: Download ImageBuilder (.tar.zst)
         run: |
