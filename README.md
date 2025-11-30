@@ -1,39 +1,115 @@
-# OpenWrt Home AP Build (MX4200v1)
+# OpenWrt Home Network – Infrastructure as Code
 
-Reproducible images for Aaron's three Linksys MX4200v1 APs with:
-- 802.11s + BATMAN-adv mesh (radio0, 5 GHz ch36 HE80)
-- Per‑VLAN overlay bridges (bat0.<VID> ↔ bridge.<VID>) so DSA + mesh play nice
-- WAN & LAN3 = untagged MGMT (VLAN 99), LAN1/2 = untagged IoT (VLAN 10)
-- SSIDs (Home/Guest/IoT) on all radios, no client isolation
-- LuCI TLS, NTP set, firewall disabled (pfSense in front), watchcat disabled
-- Collectd + vnstat graphs enabled
+This repository contains:
+- Custom OpenWrt firmware builds
+- Per-AP configuration backups
+- Network topology documentation
+- Mesh and VLAN design for my home network
 
-## Layout
+All access points are based on Linksys MX4200 hardware and run OpenWrt.
 
-```
+---
+
+## Hardware
+- Linksys MX4200 (AP-1)
+- Linksys MX4200 (AP-2)
+- Linksys MX4200 – Garage (AP-3)
+
+---
+
+## Network Overview
+Core routing and DHCP are handled upstream. All APs operate as bridged access points with VLAN trunking.
+
+Primary VLANs:
+- Home
+- Guest
+- IoT
+- Management
+
+Backhaul:
+- House APs: wired + mesh
+- Garage AP: currently migrating to wired (previously mesh)
+
+Mesh is implemented using batman-adv.
+
+---
+
+## Repository Structure
+
 openwrt-home/
-├─ files/
-│  └─ etc/uci-defaults/99-home-mesh     # first‑boot config script
-├─ packages/
-│  ├─ core.txt                          # mesh/admin baseline
-│  └─ stats.txt                         # collectd/vnstat bundle
-└─ scripts/
-   └─ build.sh                          # ImageBuilder wrapper
-```
+├── images/ # Custom firmware binaries + build config
+├── ap1/ # AP-1 configs
+├── ap2/ # AP-2 configs
+├── ap3/ # Garage AP configs
+├── diagrams/ # Network topology diagrams
+├── BUILD.md # Firmware build instructions
+├── RESTORE.md # Full AP recovery process
+└── README.md
 
-## Build
+---
 
-1. Download/extract the **ImageBuilder** for your release/target (MX4200v1 = `qualcommax/ipq807x`).  
-2. Put this repo next to (or inside) the ImageBuilder directory.
-3. Edit `files/etc/uci-defaults/99-home-mesh` to set SSIDs/keys/mesh pass.
-4. Run:
-   ```bash
-   ./scripts/build.sh
-   ```
-5. Flash the resulting `*sysupgrade.bin` with **don't keep settings**.
+## Firmware Builds
 
-## Notes
-- Keep package lists minimal; base OS packages are provided by ImageBuilder.
-- If you later want third‑party feeds (e.g., “Fantastic”), add their feed URL/key
-  to `repositories.conf` and build with `REPOSITORIES_CONF=./repositories.conf`.
-- Verify profile names with `make info` inside ImageBuilder.
+Custom firmware images are built using owut and stored in `/images`.
+
+The build configuration and package list are documented in `BUILD.md`.
+
+Only known-good images should be committed.
+
+---
+
+## Configuration Backups
+
+Each AP folder contains:
+- `network`
+- `wireless`
+- `system`
+- `firewall` (if modified)
+
+These files are direct copies from `/etc/config` on the router.
+
+Sensitive values (PSKs, secrets, keys) are redacted before commit.
+
+---
+
+## Disaster Recovery
+
+Full rebuild steps are documented in `RESTORE.md`.
+
+At a high level:
+1. Flash custom sysupgrade firmware
+2. Copy configuration files from this repo
+3. Reboot and verify mesh + VLAN operation
+
+---
+
+## Security
+
+This repository is public.
+Do NOT commit:
+- WPA keys
+- VPN private keys
+- Admin passwords
+- API tokens
+
+Use placeholders where required.
+
+---
+
+## Goals
+
+- Reproducible firmware
+- Versioned AP configuration
+- Documented VLAN + mesh design
+- Fast disaster recovery
+- Minimal manual rebuild effort
+
+---
+
+## Status
+
+Actively maintained.
+Last major work:
+- Mesh backhaul tuning
+- Garage AP recovery
+- VLAN propagation across mesh
