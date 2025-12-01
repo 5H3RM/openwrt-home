@@ -1,0 +1,166 @@
+
+config interface 'loopback'
+	option device 'lo'
+	option proto 'static'
+	option ipaddr '127.0.0.1'
+	option netmask '255.0.0.0'
+
+config globals 'globals'
+	option ula_prefix 'fd85:bc18:9a9d::/48'
+	option packet_steering '1'
+
+config device
+	option type 'bridge'
+	option name 'bridge'
+	option stp '1'
+	option igmp_snooping '1'
+	option ipv6 '0'
+	list ports 'bat0'
+	list ports 'lan1'
+	list ports 'lan2'
+	list ports 'lan3'
+	list ports 'wan'
+
+config bridge-vlan
+	option device 'bridge'
+	option vlan '1'
+	list ports 'wan:t'
+
+config bridge-vlan
+	option device 'bridge'
+	option vlan '10'
+	list ports 'lan1:t'
+	list ports 'lan2:t'
+	list ports 'lan3:t'
+	list ports 'wan:t'
+
+config bridge-vlan
+	option device 'bridge'
+	option vlan '20'
+	list ports 'wan:t'
+
+config bridge-vlan
+	option device 'bridge'
+	option vlan '30'
+	list ports 'lan1:u*'
+	list ports 'lan2:u*'
+	list ports 'lan3:t'
+	list ports 'wan:t'
+
+config bridge-vlan
+	option device 'bridge'
+	option vlan '40'
+	list ports 'wan:t'
+
+config bridge-vlan
+	option device 'bridge'
+	option vlan '50'
+	list ports 'wan:t'
+
+config bridge-vlan
+	option device 'bridge'
+	option vlan '60'
+	list ports 'wan:t'
+
+config bridge-vlan
+	option device 'bridge'
+	option vlan '99'
+	list ports 'lan1:t'
+	list ports 'lan2:t'
+	list ports 'lan3'
+	list ports 'wan:u*'
+
+config bridge-vlan
+	option device 'bridge'
+	option vlan '100'
+	list ports 'wan:t'
+
+config interface 'mgmt'
+	option proto 'dhcp'
+	option device 'br-mesh-mgmt'
+	option delegate '0'
+
+config interface 'guest'
+	option proto 'none'
+	option device 'br-mesh-guest'
+	option delegate '0'
+
+config interface 'home'
+	option proto 'none'
+	option device 'br-mesh-home'
+	option delegate '0'
+
+config interface 'IoT'
+	option proto 'none'
+	option device 'br-mesh-IoT'
+	option delegate '0'
+
+config interface 'bat0'
+	option proto 'batadv'
+	option routing_algo 'BATMAN_IV'
+	option gw_mode 'off'
+	option hop_penalty '30'
+	option delegate '0'
+	option aggregated_ogms '1'
+	option bridge_loop_avoidance '1'
+
+config interface 'mesh'
+	option proto 'batadv_hardif'
+	option master 'bat0'
+
+config device
+	option type '8021q'
+	option ifname 'bat0'
+	option vid '99'
+	option name 'bat0.99'
+	option ipv6 '0'
+
+config device
+	option type '8021q'
+	option ifname 'bat0'
+	option vid '10'
+	option name 'bat0.10'
+	option ipv6 '0'
+
+config device
+	option type 'bridge'
+	option name 'br-mesh-mgmt'
+	list ports 'bat0.99'
+	list ports 'bridge.99'
+	option ipv6 '0'
+
+config device
+	option type 'bridge'
+	option name 'br-mesh-IoT'
+	list ports 'bat0.10'
+	list ports 'bridge.10'
+	option ipv6 '0'
+
+config device
+	option type '8021q'
+	option ifname 'bat0'
+	option vid '20'
+	option name 'bat0.20'
+	option ipv6 '0'
+
+config device
+	option type 'bridge'
+	option name 'br-mesh-guest'
+	list ports 'bat0.20'
+	list ports 'bridge.20'
+	option ipv6 '0'
+
+config device
+	option type '8021q'
+	option ifname 'bat0'
+	option vid '30'
+	option name 'bat0.30'
+	option ipv6 '0'
+
+config device
+	option type 'bridge'
+	option name 'br-mesh-home'
+	list ports 'bat0.30'
+	list ports 'bridge.30'
+	option ipv6 '0'
+

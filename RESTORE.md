@@ -100,6 +100,14 @@ scp apX/firewall root@192.168.1.1:/etc/config/firewall
 
 (Replace `apX` with `ap1`, `ap2`, or `ap3`.)
 
+After copying configs, always verify:
+/etc/config/network
+/etc/config/wireless
+/etc/config/system
+/etc/config/firewall
+
+Match these against the GitHub repo before rebooting.
+
 Reboot the AP:
 
 ```bash

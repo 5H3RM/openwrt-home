@@ -38,10 +38,10 @@ Mesh is implemented using batman-adv.
 
 ```
 openwrt-home/
-├── images/     # Custom firmware binaries + build config
+├── package/     # Packages used for custom firmware builds
 ├── ap1/        # AP-1 configs
 ├── ap2/        # AP-2 configs
-├── ap3/        # Garage AP configs
+├── ap3/        # AP-3 configs
 ├── diagrams/   # Network topology diagrams
 ├── BUILD.md    # Firmware build instructions
 ├── RESTORE.md  # Full AP recovery process
