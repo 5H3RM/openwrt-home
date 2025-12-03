@@ -3,7 +3,10 @@ name: Build OpenWrt Image (MX4200 v1)
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main ]  
+  schedule:
+    # Run roughly every 14 days to avoid building on every push; adjust cron as needed.
+    - cron: "0 3 */14 * *"
 
 permissions:
   contents: write
