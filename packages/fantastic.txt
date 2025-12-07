@@ -1,0 +1,3 @@
+##Packages from fantastic-packages repo https://fantastic-packages.github.io/releases/
+fantastic-keyring
+fantastic-packages-feeds

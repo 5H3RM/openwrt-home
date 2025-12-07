@@ -1,117 +1,121 @@
-# OpenWrt Home Network – Infrastructure as Code
+# OpenWrt Home – Automated Builds + AP Backups ✨
 
-This repository contains:
-- Custom OpenWrt firmware builds
-- Per-AP configuration backups
-- Network topology documentation
-- Mesh and VLAN design for my home network
-
-All access points are based on Linksys MX4200 hardware and run OpenWrt.
+Custom OpenWrt build configuration for my Linksys MX4200 v1 access points. GitHub Actions builds reproducible sysupgrade images with my package sets, custom feeds, and overlay files. Per-AP configs, diagrams, and recovery docs keep rebuilds quick and repeatable.
 
 ---
 
-## Hardware
-- Linksys MX4200 (AP-1)
-- Linksys MX4200 (AP-2)
-- Linksys MX4200 – Garage (AP-3)
+## 🛠️ Build pipeline (GitHub Actions)
+- ImageBuilder inside Actions; resolves the latest patch in the selected series (e.g., 24.10.x).
+- Pulls ImageBuilder tarball, injects feeds from `custom-feeds/`, and keys from `keys/`.
+- Reads every list in `packages/`, strips base OS packages, and feeds the cleaned set to ImageBuilder.
+- Embeds everything under `/files` as the overlay (create this directory locally as needed).
+- Outputs `*sysupgrade.bin`, uploads as an artifact, and publishes a GitHub Release.
+- Outcome: no manual package reinstalls and fully reproducible firmware.
 
 ---
 
-## Network Overview
-Core routing and DHCP are handled upstream. All APs operate as bridged access points with VLAN trunking.
-
-Primary VLANs:
-- Home
-- Guest
-- IoT
-- Management
-
-Backhaul:
-- House APs: wired + mesh
-- Garage AP: currently migrating to wired (previously mesh)
-
-Mesh is implemented using batman-adv.
-
----
-
-## Repository Structure
+## 🗂️ Repo at a glance
 
 ```
 openwrt-home/
-├── package/     # Packages used for custom firmware builds
-├── ap1/        # AP-1 configs
-├── ap2/        # AP-2 configs
-├── ap3/        # AP-3 configs
-├── diagrams/   # Network topology diagrams
-├── BUILD.md    # Firmware build instructions
-├── RESTORE.md  # Full AP recovery process
+├── packages/           # Modular package lists (auto-loaded)
+├── custom-feeds/       # Additional feed definitions (workflow expects this name)
+├── keys/               # Feed signing keys copied into ImageBuilder
+├── files/              # Overlay injected into the firmware rootfs (create as needed)
+├── ap1/                # AP-1 config backups
+├── ap2/                # AP-2 config backups
+├── diagrams/           # Network topology diagrams
+├── .github/workflows/  # build.yml (automated ImageBuilder workflow)
+├── BUILD.md            # Firmware build notes
+├── RESTORE.md          # Full AP recovery process
 └── README.md
+```
+
+Notes:
+- The repo currently contains `custom feeds/` with a space; the workflow looks for `custom-feeds/`. Rename or symlink to match the workflow before building.
+- Add more AP folders (e.g., `ap3/`) as devices come online.
+
+---
+
+## 📦 Adding or updating packages
+- Every file in `packages/` is read automatically.
+- Edit an existing list or add a new one (e.g., `mesh.txt`, `vpn.txt`); one package per line.
+- `#` comments are allowed; no workflow edits needed.
+
+Example:
+```
+# networking tools
+ethtool
+bind-dig
+tcpdump
+luci-app-opkg
 ```
 
 ---
 
-## Firmware Builds
-
-Custom firmware images are built using owut and stored in `/images`.
-
-The build configuration and package list are documented in `BUILD.md`.
-
-Only known-good images should be committed.
-
----
-
-## Configuration Backups
-
-Each AP folder contains:
-- `network`
-- `wireless`
-- `system`
-- `firewall` (if modified)
-
-These files are direct copies from `/etc/config` on the router.
-
-Sensitive values (PSKs, secrets, keys) are redacted before commit.
+## 🛰 Custom feeds (e.g., fantastic-packages)
+- Drop feed definitions into `custom-feeds/`.
+- Example (`custom-feeds/fantastic.conf`):
+  ```
+  src/gz fantastic_packages https://fantastic-packages.github.io/releases/aarch64_cortex-a53
+  ```
+- Versionless URLs track new OpenWrt releases automatically; any `.conf` in this folder is injected.
 
 ---
 
-## Disaster Recovery
-
-Full rebuild steps are documented in `RESTORE.md`.
-
-At a high level:
-1. Flash custom sysupgrade firmware
-2. Copy configuration files from this repo
-3. Reboot and verify mesh + VLAN operation
+## 🔑 Custom signing keys
+- Place feed keys in `keys/`; they are copied into ImageBuilder’s `keys/` directory.
 
 ---
 
-## Security
-
-This repository is public.
-Do NOT commit:
-- WPA keys
-- VPN private keys
-- Admin passwords
-- API tokens
-
-Use placeholders where required.
+## 🗳️ Overlay files (/files)
+- Everything inside `/files` copies into the final firmware filesystem and overwrites defaults.
+- Use this for VLAN/mesh configs, wireless radios, hotplug scripts, custom banners, and other defaults.
+- Examples:
+  - `files/etc/config/network`
+  - `files/etc/config/wireless`
+  - `files/etc/banner`
 
 ---
 
-## Goals
+## 📤 Firmware output
+- Artifact name: `openwrt-<version>-linksys_mx4200v1-squashfs-sysupgrade.bin`.
+- Available via GitHub Actions artifacts and GitHub Releases (tagged per OpenWrt version).
+- Flash with `sysupgrade -n /tmp/firmware.bin` or via LuCI.
 
-- Reproducible firmware
-- Versioned AP configuration
+---
+
+## 🔄 Upgrading OpenWrt release versions
+- Change `OPENWRT_SERIES` in `.github/workflows/build.yml` (e.g., to `"24.11"`).
+- Push the change; the workflow resolves the latest patch, pulls ImageBuilder, injects feeds/keys/packages, and builds a matching image.
+
+---
+
+## 📚 Backups and AP configs
+- Each AP folder contains redacted `/etc/config` backups (`network`, `wireless`, `system`, `firewall` when applicable).
+- Core routing and DHCP are handled upstream; APs run as bridged devices with VLAN trunking.
+- VLANs: Home, Guest, IoT, Management.
+- Backhaul: wired + mesh for house APs; garage AP migrating to wired. Mesh uses batman-adv.
+
+---
+
+## 🧯 Disaster recovery
+- See `RESTORE.md` for the full rebuild flow.
+- High level:
+  1) Flash the custom sysupgrade image.
+  2) Copy configuration files from this repo.
+  3) Reboot and verify mesh + VLAN operation.
+
+---
+
+## 🔒 Security
+- Public repo; do **not** commit WPA keys, VPN private keys, admin passwords, or API tokens.
+- Use placeholders for any sensitive values.
+
+---
+
+## 🎯 Goals
+- Reproducible firmware images
+- Versioned AP configurations
 - Documented VLAN + mesh design
-- Fast disaster recovery
-- Minimal manual rebuild effort
-
----
-
-## Status
-
-Actively maintained.
-Last major work:
-- Mesh backhaul tuning
-- Garage AP recovery
-- VLAN propagation across mesh
+- Fast disaster recovery with minimal manual steps

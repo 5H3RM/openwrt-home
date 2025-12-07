@@ -1,11 +1,9 @@
-
 config watchcat
-	option period '5m'
+	option period '2m'
 	option mode 'ping_reboot'
 	option pinghosts '10.99.99.1'
 	option forcedelay '0'
 	option addressfamily 'any'
-	option pingperiod '30s'
+	option pingperiod '10s'
 	option pingsize 'standard'
 	option interface 'br-mesh-mgmt'
-

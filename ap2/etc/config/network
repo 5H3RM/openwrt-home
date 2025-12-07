@@ -1,4 +1,3 @@
-
 config interface 'loopback'
 	option device 'lo'
 	option proto 'static'
@@ -162,4 +161,3 @@ config device
 	list ports 'bat0.30'
 	list ports 'bridge.30'
 	option ipv6 '0'
-

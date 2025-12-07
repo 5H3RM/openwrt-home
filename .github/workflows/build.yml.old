@@ -3,8 +3,9 @@ name: Build OpenWrt Image (MX4200 v1)
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main ]  
   schedule:
+    # Run roughly every 14 days to avoid building on every push; adjust cron as needed.
     - cron: "0 3 */14 * *"
 
 permissions:
@@ -14,12 +15,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      OPENWRT_SERIES: "24.10"
-      OPENWRT_VER: "24.10.4"
+      OPENWRT_SERIES: "24.10" # stick to this series; we resolve the latest patch dynamically
+      OPENWRT_VER: "24.10.4"  # fallback; overwritten by resolver step
       TARGET: "qualcommax"
       SUBTARGET: "ipq807x"
       PROFILE: "linksys_mx4200v1"
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -55,23 +55,6 @@ jobs:
           echo "IBDIR=$IBDIR" >> $GITHUB_ENV
           echo "IBDIR resolved to: $IBDIR"
 
-      - name: Add custom feeds (e.g., fantastic-packages)
-        run: |
-          set -euxo pipefail
-          if [ -d custom-feeds ]; then
-            mkdir -p "$IBDIR"/repositories.conf.d
-            cp custom-feeds/*.conf "$IBDIR"/repositories.conf.d/
-            echo "Custom feeds injected."
-          fi
-
-      - name: Add custom keys (signing keys)
-        run: |
-          set -euxo pipefail
-          if [ -d keys ]; then
-            cp keys/* "$IBDIR"/keys/ || true
-            echo "Custom package keys added."
-          fi
-
       - name: Show default packages for profile
         run: |
           set -e
@@ -81,27 +64,20 @@ jobs:
             jq -r --arg P "${PROFILE}" '.[] | .profiles[$P].default_packages[]?' profiles.json | sort
           fi
 
-      - name: Assemble and validate package list (include all lists in packages/)
+      - name: Assemble and validate package list (strip comments/empties)
         run: |
           set -euxo pipefail
 
-          sanitize() { awk '!/^\s*($|#)/ { print $1 }'; }
+          sanitize() { awk '!/^\s*($|#)/ { print $1 }' | tr '\n' ' '; }
 
-          PKGS=""
+          CORE_PKGS=""
+          STATS_PKGS=""
+          [ -f packages/core.txt ]  && CORE_PKGS="$(sanitize < packages/core.txt)"
+          [ -f packages/stats.txt ] && STATS_PKGS="$(sanitize < packages/stats.txt)"
+          PKGS="$(echo "$CORE_PKGS $STATS_PKGS" | xargs || true)"
 
-          if [ -d packages ]; then
-            echo "Combining all package lists in packages/"
-            for file in packages/*; do
-              echo "Including: $file"
-              SANITIZED="$(sanitize < "$file" || true)"
-              PKGS="$PKGS $SANITIZED"
-            done
-          fi
-
-          PKGS="$(echo "$PKGS" | xargs || true)"
-
+          # Skip base OS packages (IB provides these)
           BASE_RE='^(base-files|busybox|ca-bundle|dnsmasq($|-full|-.*)?|dropbear|e2fsprogs|firewall4|fstools|libc|libgcc|libustream-.*|logd|losetup|mtd|netifd|nftables|odhcp6c|odhcpd-ipv6only|opkg|ppp($|-mod-pppoe)?|procd(-ujail)?|uboot-envtools|uci|uclient-fetch|urandom-seed|urngd)$'
-
           CLEAN=""
           for p in $PKGS; do
             if echo "$p" | grep -Eq "$BASE_RE"; then
@@ -112,14 +88,17 @@ jobs:
           done
           PKGS="$(echo "$CLEAN" | xargs || true)"
 
+          # If using full wpad*, subtract basic variants to avoid file clashes
           if echo " $PKGS " | grep -Eq ' wpad-(mbedtls|wolfssl|openssl) '; then
             PKGS="$PKGS -wpad-basic-mbedtls -wpad-basic-wolfssl -wpad-mini"
           fi
 
+          # Guard: ensure we pass at least one package
           if [ -z "$PKGS" ]; then PKGS="luci"; fi
 
+          # Guard: reject NSS (not in official feeds for this target)
           if echo " $PKGS " | grep -q " kmod-qca-nss-dp "; then
-            echo "::error::kmod-qca-nss-dp is not in the official ${TARGET}/${SUBTARGET} feeds."
+            echo "::error::kmod-qca-nss-dp is not in the official ${TARGET}/${SUBTARGET} feeds. Remove it or use a custom NSS build."
             exit 1
           fi
 
