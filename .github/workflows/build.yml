@@ -38,10 +38,9 @@ jobs:
           MATCHES=$(echo "$PAGE" | grep -oE "${SERIES//./\\.}\\.[0-9]+" | sort -V | uniq)
           VER=$(echo "$MATCHES" | tail -n1 || true)
           if [ -z "$VER" ]; then
-            echo "::error::No releases found for series ${SERIES}."
+            echo "::error::No releases found for series ${SERIES}"
             exit 1
           fi
-          echo "Resolved latest ${SERIES}.x release: ${VER}"
           echo "OPENWRT_VER=${VER}" >> "$GITHUB_ENV"
 
       - name: Download ImageBuilder
@@ -53,7 +52,7 @@ jobs:
           IBDIR="$(ls -d openwrt-imagebuilder-${OPENWRT_VER}-${TARGET}-${SUBTARGET}.Linux-* | head -1)"
           echo "IBDIR=$IBDIR" >> $GITHUB_ENV
 
-      - name: Generate and inject Fantastic Packages feed
+      - name: Add Fantastic Packages Feed (YAML-safe, no heredoc)
         run: |
           set -euxo pipefail
 
@@ -62,29 +61,31 @@ jobs:
 
           mkdir -p custom-feeds
 
-          cat <<EOF > custom-feeds/fantastic.conf
-src/gz fantastic_packages_packages https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/packages
-src/gz fantastic_packages_luci https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/luci
-src/gz fantastic_packages_special https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/special
-EOF
+          # Write the feed file WITHOUT heredoc
+          echo "src/gz fantastic_packages_packages https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/packages" > custom-feeds/fantastic.conf
+          echo "src/gz fantastic_packages_luci https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/luci" >> custom-feeds/fantastic.conf
+          echo "src/gz fantastic_packages_special https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/special" >> custom-feeds/fantastic.conf
 
+          echo "Fantastic feed file contents:"
+          cat custom-feeds/fantastic.conf
+
+          # Copy to repositories.conf.d
           mkdir -p "$IBDIR/repositories.conf.d"
           cp custom-feeds/*.conf "$IBDIR/repositories.conf.d/"
 
+          # Prepend feed to main repositories.conf
           REPO_CONF="$IBDIR/repositories.conf"
-          TMPFILE="$IBDIR/repositories.conf.tmp"
+          TMP="$IBDIR/repositories.conf.tmp"
 
-          {
-            echo "src/gz fantastic_packages_packages https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/packages"
-            echo "src/gz fantastic_packages_luci https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/luci"
-            echo "src/gz fantastic_packages_special https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/special"
-            echo ""
-            cat "$REPO_CONF"
-          } > "$TMPFILE"
+          echo "src/gz fantastic_packages_packages https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/packages" > "$TMP"
+          echo "src/gz fantastic_packages_luci https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/luci" >> "$TMP"
+          echo "src/gz fantastic_packages_special https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/special" >> "$TMP"
+          echo "" >> "$TMP"
+          cat "$REPO_CONF" >> "$TMP"
 
-          mv "$TMPFILE" "$REPO_CONF"
+          mv "$TMP" "$REPO_CONF"
 
-          echo "Fantastic feeds prepended."
+          echo "Prepended Fantastic feeds:"
           head -n 20 "$REPO_CONF"
 
       - name: Add custom keys
@@ -94,25 +95,23 @@ EOF
             cp keys/* "$IBDIR/keys/" || true
           fi
 
-      - name: Show default packages
+      - name: Show default packages for profile
         run: |
           set -e
           cd "$IBDIR"
-          if [ -f profiles.json ]; then
-            jq -r --arg P "${PROFILE}" '.[] | .profiles[$P].default_packages[]?' profiles.json | sort
-          fi
+          jq -r --arg P "${PROFILE}" '.[] | .profiles[$P].default_packages[]?' profiles.json | sort
 
       - name: Assemble package list
         run: |
           set -euxo pipefail
 
           sanitize() { awk '!/^\s*($|#)/ { print $1 }'; }
-
           PKGS=""
+
           if [ -d packages ]; then
             for file in packages/*; do
-              SANITIZED="$(sanitize < "$file" || true)"
-              PKGS="$PKGS $SANITIZED"
+              SAN="$(sanitize < "$file" || true)"
+              PKGS="$PKGS $SAN"
             done
           fi
 
@@ -130,25 +129,9 @@ EOF
           done
 
           PKGS="$(echo "$CLEAN" | xargs || true)"
-
-          if echo " $PKGS " | grep -Eq ' wpad-(mbedtls|wolfssl|openssl) '; then
-            PKGS="$PKGS -wpad-basic-mbedtls -wpad-basic-wolfssl -wpad-mini"
-          fi
-
           [ -z "$PKGS" ] && PKGS="luci"
 
           echo "PKGS=$PKGS" >> $GITHUB_ENV
-
-      - name: Verify profile exists
-        run: |
-          set -euxo pipefail
-          cd "$IBDIR"
-          if [ -f profiles.json ]; then
-            jq -r '.[].profiles | keys[]' profiles.json | grep -q "^${PROFILE}$" || {
-              echo "::error::Profile ${PROFILE} not found"
-              exit 1
-            }
-          fi
 
       - name: Build image
         run: |
