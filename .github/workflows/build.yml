@@ -65,11 +65,12 @@ jobs:
           echo "Generating custom-feeds/fantastic.conf..."
           mkdir -p custom-feeds
 
+          # 🔥 IMPORTANT: NO INDENTATION INSIDE THE HEREDOC!
           cat << EOF > custom-feeds/fantastic.conf
-          src/gz fantastic_packages_packages https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/packages
-          src/gz fantastic_packages_luci https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/luci
-          src/gz fantastic_packages_special https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/special
-          EOF
+src/gz fantastic_packages_packages https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/packages
+src/gz fantastic_packages_luci https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/luci
+src/gz fantastic_packages_special https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/special
+EOF
 
           echo "fantastic.conf created:"
           cat custom-feeds/fantastic.conf
@@ -78,15 +79,22 @@ jobs:
           mkdir -p "$IBDIR/repositories.conf.d"
           cp custom-feeds/*.conf "$IBDIR/repositories.conf.d/"
 
-          # 🔥 CRITICAL FIX: Force ImageBuilder to read the feed
-          echo "Appending Fantastic feeds to repositories.conf..."
+          # 🔥 CRITICAL FIX: Prepend feeds to the main repositories.conf
+          REPO_CONF="$IBDIR/repositories.conf"
+          TMPFILE="$IBDIR/repositories.conf.tmp"
+
           {
             echo "src/gz fantastic_packages_packages https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/packages"
             echo "src/gz fantastic_packages_luci https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/luci"
             echo "src/gz fantastic_packages_special https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/special"
-          } >> "$IBDIR/repositories.conf"
+            echo ""
+            cat "$REPO_CONF"
+          } > "$TMPFILE"
 
-          echo "Fantastic Packages feed successfully injected."
+          mv "$TMPFILE" "$REPO_CONF"
+
+          echo "Fantastic feeds successfully PREPENDED to repositories.conf:"
+          head -n 20 "$REPO_CONF"
 
       - name: Add custom keys (signing keys)
         run: |
@@ -134,6 +142,7 @@ jobs:
               CLEAN="$CLEAN $p"
             fi
           done
+
           PKGS="$(echo "$CLEAN" | xargs || true)"
 
           if echo " $PKGS " | grep -Eq ' wpad-(mbedtls|wolfssl|openssl) '; then
