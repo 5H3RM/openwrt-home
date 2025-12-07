@@ -55,6 +55,18 @@ jobs:
           echo "IBDIR=$IBDIR" >> $GITHUB_ENV
           echo "IBDIR resolved to: $IBDIR"
 
+      - name: Generate fantastic.conf dynamically
+        run: |
+          mkdir -p custom-feeds
+          SERIES="${OPENWRT_SERIES}"
+          ARCH="aarch64_cortex-a53"
+          cat << EOF > custom-feeds/fantastic.conf
+src/gz fantastic_packages_packages https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/packages
+src/gz fantastic_packages_luci https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/luci
+src/gz fantastic_packages_special https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/special
+EOF
+          echo "fantastic.conf created!"
+          
       - name: Add custom feeds (e.g., fantastic-packages)
         run: |
           set -euxo pipefail
