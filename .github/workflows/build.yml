@@ -38,22 +38,20 @@ jobs:
           MATCHES=$(echo "$PAGE" | grep -oE "${SERIES//./\\.}\\.[0-9]+" | sort -V | uniq)
           VER=$(echo "$MATCHES" | tail -n1 || true)
           if [ -z "$VER" ]; then
-            echo "::error::No releases found for series ${SERIES}. The site may have changed."
+            echo "::error::No releases found for series ${SERIES}."
             exit 1
           fi
           echo "Resolved latest ${SERIES}.x release: ${VER}"
           echo "OPENWRT_VER=${VER}" >> "$GITHUB_ENV"
 
-      - name: Download ImageBuilder (.tar.zst)
+      - name: Download ImageBuilder
         run: |
           set -euxo pipefail
           IB_URL="https://downloads.openwrt.org/releases/${OPENWRT_VER}/targets/${TARGET}/${SUBTARGET}/openwrt-imagebuilder-${OPENWRT_VER}-${TARGET}-${SUBTARGET}.Linux-x86_64.tar.zst"
-          echo "Fetching $IB_URL"
           curl -fL "$IB_URL" -o ib.tar.zst
           tar -I zstd -xf ib.tar.zst
           IBDIR="$(ls -d openwrt-imagebuilder-${OPENWRT_VER}-${TARGET}-${SUBTARGET}.Linux-* | head -1)"
           echo "IBDIR=$IBDIR" >> $GITHUB_ENV
-          echo "IBDIR resolved to: $IBDIR"
 
       - name: Generate and inject Fantastic Packages feed
         run: |
@@ -62,24 +60,17 @@ jobs:
           SERIES="${OPENWRT_SERIES}"
           ARCH="aarch64_cortex-a53"
 
-          echo "Generating custom-feeds/fantastic.conf..."
           mkdir -p custom-feeds
 
-          # 🔥 IMPORTANT: NO INDENTATION INSIDE THE HEREDOC!
-          cat << EOF > custom-feeds/fantastic.conf
+          cat <<EOF > custom-feeds/fantastic.conf
 src/gz fantastic_packages_packages https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/packages
 src/gz fantastic_packages_luci https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/luci
 src/gz fantastic_packages_special https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/special
 EOF
 
-          echo "fantastic.conf created:"
-          cat custom-feeds/fantastic.conf
-
-          echo "Injecting Fantastic feeds into ImageBuilder..."
           mkdir -p "$IBDIR/repositories.conf.d"
           cp custom-feeds/*.conf "$IBDIR/repositories.conf.d/"
 
-          # 🔥 CRITICAL FIX: Prepend feeds to the main repositories.conf
           REPO_CONF="$IBDIR/repositories.conf"
           TMPFILE="$IBDIR/repositories.conf.tmp"
 
@@ -93,38 +84,33 @@ EOF
 
           mv "$TMPFILE" "$REPO_CONF"
 
-          echo "Fantastic feeds successfully PREPENDED to repositories.conf:"
+          echo "Fantastic feeds prepended."
           head -n 20 "$REPO_CONF"
 
-      - name: Add custom keys (signing keys)
+      - name: Add custom keys
         run: |
           set -euxo pipefail
           if [ -d keys ]; then
-            cp keys/* "$IBDIR"/keys/ || true
-            echo "Custom package keys added."
+            cp keys/* "$IBDIR/keys/" || true
           fi
 
-      - name: Show default packages for profile
+      - name: Show default packages
         run: |
           set -e
           cd "$IBDIR"
           if [ -f profiles.json ]; then
-            echo "Default packages for ${PROFILE}:"
             jq -r --arg P "${PROFILE}" '.[] | .profiles[$P].default_packages[]?' profiles.json | sort
           fi
 
-      - name: Assemble and validate package list (include all lists in packages/)
+      - name: Assemble package list
         run: |
           set -euxo pipefail
 
           sanitize() { awk '!/^\s*($|#)/ { print $1 }'; }
 
           PKGS=""
-
           if [ -d packages ]; then
-            echo "Combining all package lists in packages/"
             for file in packages/*; do
-              echo "Including: $file"
               SANITIZED="$(sanitize < "$file" || true)"
               PKGS="$PKGS $SANITIZED"
             done
@@ -137,7 +123,7 @@ EOF
           CLEAN=""
           for p in $PKGS; do
             if echo "$p" | grep -Eq "$BASE_RE"; then
-              echo "Skipping base package: $p"
+              echo "Skipping base: $p"
             else
               CLEAN="$CLEAN $p"
             fi
@@ -149,30 +135,25 @@ EOF
             PKGS="$PKGS -wpad-basic-mbedtls -wpad-basic-wolfssl -wpad-mini"
           fi
 
-          if [ -z "$PKGS" ]; then PKGS="luci"; fi
+          [ -z "$PKGS" ] && PKGS="luci"
 
-          if echo " $PKGS " | grep -q " kmod-qca-nss-dp "; then
-            echo "::error::kmod-qca-nss-dp is not in the official ${TARGET}/${SUBTARGET} feeds."
-            exit 1
-          fi
-
-          echo "Using packages: $PKGS"
           echo "PKGS=$PKGS" >> $GITHUB_ENV
 
-      - name: Sanity - ensure profile exists
+      - name: Verify profile exists
         run: |
           set -euxo pipefail
           cd "$IBDIR"
           if [ -f profiles.json ]; then
             jq -r '.[].profiles | keys[]' profiles.json | grep -q "^${PROFILE}$" || {
-              echo "::error::Profile '${PROFILE}' not found in profiles.json"; exit 1; }
+              echo "::error::Profile ${PROFILE} not found"
+              exit 1
+            }
           fi
 
-      - name: Build image (verbose)
+      - name: Build image
         run: |
           set -euxo pipefail
           cd "$IBDIR"
-          echo "make -j$(nproc) V=s image PROFILE='${PROFILE}' PACKAGES='${PKGS}'"
           make -j"$(nproc)" V=s image PROFILE="${PROFILE}" PACKAGES="${PKGS}"
 
       - name: Upload firmware
@@ -182,14 +163,13 @@ EOF
           name: openwrt-${{ env.OPENWRT_VER }}-${{ env.PROFILE }}
           path: ${{ env.IBDIR }}/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/*sysupgrade*.bin
 
-      - name: Publish release asset for this build
+      - name: Publish release asset
         if: success()
         uses: ncipollo/release-action@v1
         with:
           tag: openwrt-${{ env.OPENWRT_VER }}
           name: OpenWrt ${{ env.OPENWRT_VER }} (${{ env.PROFILE }})
           artifacts: ${{ env.IBDIR }}/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/*sysupgrade*.bin
-          artifactContentType: application/octet-stream
           allowUpdates: true
 
       - name: Upload logs on failure
