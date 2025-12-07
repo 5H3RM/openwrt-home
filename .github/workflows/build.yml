@@ -55,26 +55,38 @@ jobs:
           echo "IBDIR=$IBDIR" >> $GITHUB_ENV
           echo "IBDIR resolved to: $IBDIR"
 
-      - name: Generate fantastic.conf dynamically
+      - name: Generate and inject Fantastic Packages feed
         run: |
-          mkdir -p custom-feeds
+          set -euxo pipefail
+
           SERIES="${OPENWRT_SERIES}"
           ARCH="aarch64_cortex-a53"
+
+          echo "Generating custom-feeds/fantastic.conf..."
+          mkdir -p custom-feeds
+
           cat << EOF > custom-feeds/fantastic.conf
           src/gz fantastic_packages_packages https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/packages
           src/gz fantastic_packages_luci https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/luci
           src/gz fantastic_packages_special https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/special
           EOF
-          echo "fantastic.conf created!"
-          
-      - name: Add custom feeds (e.g., fantastic-packages)
-        run: |
-          set -euxo pipefail
-          if [ -d custom-feeds ]; then
-            mkdir -p "$IBDIR"/repositories.conf.d
-            cp custom-feeds/*.conf "$IBDIR"/repositories.conf.d/
-            echo "Custom feeds injected."
-          fi
+
+          echo "fantastic.conf created:"
+          cat custom-feeds/fantastic.conf
+
+          echo "Injecting Fantastic feeds into ImageBuilder..."
+          mkdir -p "$IBDIR/repositories.conf.d"
+          cp custom-feeds/*.conf "$IBDIR/repositories.conf.d/"
+
+          # 🔥 CRITICAL FIX: Force ImageBuilder to read the feed
+          echo "Appending Fantastic feeds to repositories.conf..."
+          {
+            echo "src/gz fantastic_packages_packages https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/packages"
+            echo "src/gz fantastic_packages_luci https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/luci"
+            echo "src/gz fantastic_packages_special https://fantastic-packages.github.io/packages/releases/${SERIES}/packages/${ARCH}/special"
+          } >> "$IBDIR/repositories.conf"
+
+          echo "Fantastic Packages feed successfully injected."
 
       - name: Add custom keys (signing keys)
         run: |
