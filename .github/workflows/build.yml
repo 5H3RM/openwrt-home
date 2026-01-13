@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       OPENWRT_SERIES: "25.12"
-      OPENWRT_VER: "25.12.0-rc1"
+      OPENWRT_VER: "25.12.0-rc2"
       TARGET: "qualcommax"
       SUBTARGET: "ipq807x"
       PROFILE: "linksys_mx4200v1"
